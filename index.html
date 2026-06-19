@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixel Art Toy</title>
+<meta name="description" content="Type anything and get instant pixel art — no AI, pure math. Choose your palette, size, and scale.">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: system-ui, sans-serif;
+    background: #0f0f11;
+    color: #e8e8e8;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 1rem;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.4rem;
+    color: #fff;
+  }
+
+  .subtitle {
+    font-size: 0.85rem;
+    color: #888;
+    margin-bottom: 2rem;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    max-width: 560px;
+    margin-bottom: 1.5rem;
+  }
+
+  input[type="text"] {
+    flex: 1;
+    padding: 10px 14px;
+    background: #1a1a1f;
+    border: 1px solid #333;
+    border-radius: 8px;
+    color: #e8e8e8;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  input[type="text"]:focus { border-color: #6c63ff; }
+  input[type="text"]::placeholder { color: #555; }
+
+  button {
+    padding: 10px 20px;
+    background: #6c63ff;
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    white-space: nowrap;
+  }
+
+  button:hover { background: #7c74ff; }
+  button:active { transform: scale(0.97); }
+  button:disabled { background: #333; color: #666; cursor: default; }
+
+  .controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .controls label {
+    font-size: 0.8rem;
+    color: #888;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .controls select {
+    padding: 4px 8px;
+    background: #1a1a1f;
+    border: 1px solid #333;
+    border-radius: 6px;
+    color: #e8e8e8;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  .canvas-wrap {
+    position: relative;
+    border: 1px solid #222;
+    border-radius: 4px;
+    background: #000;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  canvas {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border-radius: 4px;
+  }
+
+  .actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 1.2rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .btn-outline {
+    background: transparent;
+    border: 1px solid #444;
+    color: #ccc;
+    padding: 8px 16px;
+    font-size: 0.85rem;
+  }
+
+  .btn-outline:hover { background: #1a1a1f; border-color: #666; color: #fff; }
+
+  .tag-hint {
+    font-size: 0.75rem;
+    color: #555;
+    margin-top: 1rem;
+    text-align: center;
+    max-width: 400px;
+  }
+
+  .tag-hint span {
+    color: #6c63ff;
+    cursor: pointer;
+  }
+
+  .tag-hint span:hover { text-decoration: underline; }
+
+  .generating {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.7);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: #aaa;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .generating.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<h1>Pixel Art Toy</h1>
+<p class="subtitle">Type anything. Get pixel art.</p>
+
+<div class="input-row">
+  <input type="text" id="prompt" placeholder="e.g. dragon, space city, cozy cabin at night…" maxlength="80">
+  <button id="genBtn" onclick="generate()">Draw it</button>
+</div>
+
+<div class="controls">
+  <label>Size
+    <select id="sizeSelect">
+      <option value="32">32×32 (tiny)</option>
+      <option value="48" selected>48×48 (normal)</option>
+      <option value="64">64×64 (detailed)</option>
+    </select>
+  </label>
+  <label>Palette
+    <select id="paletteSelect">
+      <option value="auto">auto (from prompt)</option>
+      <option value="sunset">sunset</option>
+      <option value="forest">forest</option>
+      <option value="ocean">ocean</option>
+      <option value="candy">candy</option>
+      <option value="mono">monochrome</option>
+      <option value="gameboy">game boy</option>
+    </select>
+  </label>
+  <label>Scale
+    <select id="scaleSelect">
+      <option value="6">6×</option>
+      <option value="8" selected>8×</option>
+      <option value="10">10×</option>
+      <option value="12">12×</option>
+    </select>
+  </label>
+</div>
+
+<div class="canvas-wrap" id="wrap">
+  <canvas id="canvas"></canvas>
+  <div class="generating" id="genOverlay">Generating…</div>
+</div>
+
+<div class="actions">
+  <button class="btn-outline" onclick="randomPrompt()">Surprise me</button>
+  <button class="btn-outline" onclick="saveImage()">Save PNG</button>
+  <button class="btn-outline" onclick="generate()">Redraw</button>
+</div>
+
+<p class="tag-hint">
+  Try:
+  <span onclick="setPrompt('cyberpunk city at night')">cyberpunk city at night</span> ·
+  <span onclick="setPrompt('cozy witch cottage')">cozy witch cottage</span> ·
+  <span onclick="setPrompt('space whale')">space whale</span> ·
+  <span onclick="setPrompt('pixel ramen bowl')">pixel ramen bowl</span>
+</p>
+
+<script>
+const PALETTES = {
+  sunset:   ['#1a0533','#3d0b69','#8b1a8b','#d4527b','#ff8c6b','#ffd166','#fff3b0','#ffffff'],
+  forest:   ['#0d1f0d','#1a3a1a','#2d5a27','#4a8c3f','#74b856','#a8d96b','#d4f0a0','#f0f9e0'],
+  ocean:    ['#000d1a','#001f3f','#003d7a','#0066cc','#0099ff','#33bbff','#99ddff','#e0f5ff'],
+  candy:    ['#ff006e','#fb5607','#ffbe0b','#8338ec','#3a86ff','#06d6a0','#ffffff','#ffe8f7'],
+  mono:     ['#000000','#111111','#333333','#555555','#777777','#999999','#cccccc','#ffffff'],
+  gameboy:  ['#0f380f','#306230','#8bac0f','#9bbc0f','#ffffff','#9bbc0f','#306230','#0f380f'],
+  auto:     null,
+};
+
+const THEMES = {
+  dragon:   { palette: 'sunset',  scene: drawDragon },
+  fire:     { palette: 'sunset',  scene: drawDragon },
+  space:    { palette: 'ocean',   scene: drawSpace },
+  galaxy:   { palette: 'ocean',   scene: drawSpace },
+  star:     { palette: 'ocean',   scene: drawSpace },
+  city:     { palette: 'mono',    scene: drawCity },
+  cyberpunk:{ palette: 'sunset',  scene: drawCity },
+  forest:   { palette: 'forest',  scene: drawForest },
+  tree:     { palette: 'forest',  scene: drawForest },
+  nature:   { palette: 'forest',  scene: drawForest },
+  cabin:    { palette: 'forest',  scene: drawCabin },
+  cottage:  { palette: 'forest',  scene: drawCabin },
+  house:    { palette: 'forest',  scene: drawCabin },
+  witch:    { palette: 'sunset',  scene: drawCabin },
+  ocean:    { palette: 'ocean',   scene: drawOcean },
+  sea:      { palette: 'ocean',   scene: drawOcean },
+  water:    { palette: 'ocean',   scene: drawOcean },
+  whale:    { palette: 'ocean',   scene: drawOcean },
+  ramen:    { palette: 'candy',   scene: drawFood },
+  food:     { palette: 'candy',   scene: drawFood },
+  bowl:     { palette: 'candy',   scene: drawFood },
+  cat:      { palette: 'mono',    scene: drawCat },
+  kitten:   { palette: 'mono',    scene: drawCat },
+  mountain: { palette: 'forest',  scene: drawMountain },
+  castle:   { palette: 'sunset',  scene: drawCastle },
+  robot:    { palette: 'gameboy', scene: drawRobot },
+  pixel:    { palette: 'candy',   scene: drawRandom },
+};
+
+const SURPRISES = [
+  'cyberpunk city at night','cozy witch cottage','space whale','pixel ramen bowl',
+  'dragon in the clouds','forest cabin at dusk','robot on the moon','candy mountain',
+  'ocean sunset','pixel castle','lost cat in rain','galaxy explorer',
+];
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let rng;
+
+function seededRng(seed) {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return () => {
+    h ^= h << 13; h ^= h >> 17; h ^= h << 5;
+    return ((h >>> 0) / 0xFFFFFFFF);
+  };
+}
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return [r,g,b];
+}
+
+function lerp(a, b, t) { return a + (b-a)*t; }
+function clamp(v,lo,hi) { return Math.max(lo,Math.min(hi,v)); }
+
+function noise(x, y) {
+  const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return n - Math.floor(n);
+}
+
+function fbm(x, y, oct=4) {
+  let v=0, a=0.5, freq=1;
+  for (let i=0;i<oct;i++) { v += a*noise(x*freq, y*freq); a*=0.5; freq*=2.09; }
+  return v;
+}
+
+function setPixel(data, x, y, W, col) {
+  const i = (y*W+x)*4;
+  data[i]=col[0]; data[i+1]=col[1]; data[i+2]=col[2]; data[i+3]=255;
+}
+
+function getPalette(name) {
+  const p = PALETTES[name];
+  return p ? p.map(hexToRgb) : null;
+}
+
+function autoPalette(prompt) {
+  const p = prompt.toLowerCase();
+  for (const [key, theme] of Object.entries(THEMES)) {
+    if (p.includes(key)) return getPalette(theme.palette);
+  }
+  return getPalette('sunset');
+}
+
+function pickScene(prompt) {
+  const p = prompt.toLowerCase();
+  const words = p.split(/\s+/);
+  for (const w of words) {
+    if (THEMES[w]) return THEMES[w].scene;
+  }
+  for (const [key, theme] of Object.entries(THEMES)) {
+    if (p.includes(key)) return theme.scene;
+  }
+  return drawRandom;
+}
+
+function mapColor(v, palette) {
+  const i = clamp(Math.floor(v * (palette.length-1)), 0, palette.length-2);
+  const t = v * (palette.length-1) - i;
+  return palette[i].map((c,k) => Math.round(lerp(c, palette[i+1][k], t)));
+}
+
+function drawSky(data, W, H, palette, horizon=0.55) {
+  for (let y=0;y<H;y++) for (let x=0;x<W;x++) {
+    const fy = y/H;
+    const v = fy < horizon
+      ? lerp(0.15, 0.55, fy/horizon) + (rng()-0.5)*0.04
+      : lerp(0.6, 0.95, (fy-horizon)/(1-horizon)) + (rng()-0.5)*0.03;
+    setPixel(data,x,y,W, mapColor(clamp(v,0,1), palette));
+  }
+}
+
+function drawStars(data, W, H, palette, count=40) {
+  for (let i=0;i<count;i++) {
+    const x = Math.floor(rng()*W);
+    const y = Math.floor(rng()*H*0.5);
+    const b = 0.85 + rng()*0.15;
+    setPixel(data,x,y,W, mapColor(b, palette));
+  }
+}
+
+function drawDragon(data, W, H, palette) {
+  drawSky(data,W,H,palette,0.6);
+  drawStars(data,W,H,palette,20);
+  const cx=Math.floor(W/2), cy=Math.floor(H*0.4);
+  for (let dy=-8;dy<=8;dy++) for (let dx=-12;dx<=12;dx++) {
+    const dist=Math.sqrt(dx*dx*0.5+dy*dy);
+    if (dist<8+(rng()-0.5)*2) {
+      const v=0.8-dist/14+rng()*0.08;
+      setPixel(data,cx+dx,cy+dy,W,mapColor(clamp(v,0,1),palette));
+    }
+  }
+  for (let i=0;i<3;i++) {
+    const wx=cx+(i%2===0?-1:1)*(5+i*2), wy=cy-(2+i);
+    for (let dy=-3;dy<=1;dy++) for (let dx=-4;dx<=4;dx++) {
+      if (Math.abs(dx)+Math.abs(dy)*1.5<5) {
+        setPixel(data,wx+dx,wy+dy,W,mapColor(0.75+rng()*0.1,palette));
+      }
+    }
+  }
+  const tx=cx+14,ty=cy;
+  for (let i=0;i<10;i++) {
+    if (tx+i<W&&ty+i<H) setPixel(data,tx+i,ty+Math.floor(Math.sin(i*0.5)*2),W,mapColor(0.7,palette));
+  }
+}
+
+function drawSpace(data, W, H, palette) {
+  for (let y=0;y<H;y++) for (let x=0;x<W;x++) {
+    const v=0.05+fbm(x/W*3,y/H*3)*0.25;
+    setPixel(data,x,y,W,mapColor(clamp(v,0,1),palette));
+  }
+  drawStars(data,W,H,palette,60);
+  const px=Math.floor(W*0.65),py=Math.floor(H*0.3),pr=Math.floor(W*0.15);
+  for (let dy=-pr;dy<=pr;dy++) for (let dx=-pr;dx<=pr;dx++) {
+    const d=Math.sqrt(dx*dx+dy*dy);
+    if (d<=pr) {
+      const v=0.45+0.35*(1-d/pr)+rng()*0.08;
+      setPixel(data,px+dx,py+dy,W,mapColor(clamp(v,0,1),palette));
+    }
+  }
+  const rx=px-Math.floor(pr*0.3);
+  for (let dy=-2;dy<=2;dy++) for (let dx=-Math.floor(pr*1.6);dx<=Math.floor(pr*1.6);dx++) {
+    if (Math.abs(dx/pr)+Math.abs(dy/2)*1.5<1.6) {
+      setPixel(data,rx+dx,py+dy,W,mapColor(0.65+rng()*0.05,palette));
+    }
+  }
+}
+
+function drawCity(data, W, H, palette) {
+  const sky=Math.floor(H*0.45);
+  for (let y=0;y<sky;y++) for (let x=0;x<W;x++) {
+    const v=lerp(0.08,0.3,y/sky)+rng()*0.02;
+    setPixel(data,x,y,W,mapColor(clamp(v,0,1),palette));
+  }
+  drawStars(data,W,H,palette,30);
+  const cols=6+Math.floor(rng()*4);
+  const bw=Math.floor(W/(cols+1));
+  for (let i=0;i<cols;i++) {
+    const bx=Math.floor((i+0.5)*W/cols)-Math.floor(bw/2);
+    const bh=Math.floor(H*0.3)+Math.floor(rng()*H*0.35);
+    const by=H-bh;
+    const bv=0.2+rng()*0.3;
+    for (let y=by;y<H;y++) for (let x=bx;x<bx+bw-1;x++) {
+      if (x>=0&&x<W) setPixel(data,x,y,W,mapColor(clamp(bv+rng()*0.05,0,1),palette));
+    }
+    const winR=3, winC=Math.floor(bw/winR)-1;
+    for (let wy=by+2;wy<H-2;wy+=winR) for (let wc=0;wc<winC;wc++) {
+      if (rng()<0.6) {
+        const wx=bx+1+wc*winR;
+        setPixel(data,wx,wy,W,mapColor(0.85+rng()*0.15,palette));
+      }
+    }
+  }
+}
+
+function drawForest(data, W, H, palette) {
+  drawSky(data,W,H,palette,0.5);
+  const numTrees=8+Math.floor(rng()*6);
+  for (let t=0;t<numTrees;t++) {
+    const tx=Math.floor(rng()*W);
+    const th=Math.floor(H*0.25)+Math.floor(rng()*H*0.2);
+    const ty=H-th;
+    const tw=Math.floor(th*0.5);
+    for (let y=ty;y<H;y++) {
+      const spread=Math.floor((H-y)/H*tw*(1-(y-ty)/H*0.3));
+      for (let dx=-spread;dx<=spread;dx++) {
+        if (tx+dx>=0&&tx+dx<W) {
+          const v=0.4+0.3*((H-y)/H)+rng()*0.1;
+          setPixel(data,tx+dx,y,W,mapColor(clamp(v,0,1),palette));
+        }
+      }
+    }
+  }
+}
+
+function drawCabin(data, W, H, palette) {
+  drawSky(data,W,H,palette,0.55);
+  drawStars(data,W,H,palette,15);
+  for (let y=Math.floor(H*0.55);y<H;y++) for (let x=0;x<W;x++) {
+    const v=0.3+0.15*((y-H*0.55)/(H*0.45))+rng()*0.04;
+    setPixel(data,x,y,W,mapColor(clamp(v,0,1),palette));
+  }
+  const cx=Math.floor(W/2), bw=Math.floor(W*0.35), bh=Math.floor(H*0.22);
+  const bx=cx-Math.floor(bw/2), by=Math.floor(H*0.5);
+  for (let y=by;y<by+bh;y++) for (let x=bx;x<bx+bw;x++) {
+    setPixel(data,x,y,W,mapColor(0.35+rng()*0.05,palette));
+  }
+  const rh=Math.floor(bh*0.55);
+  for (let y=0;y<rh;y++) {
+    const w=Math.floor((bw+4)*(1-y/rh));
+    for (let dx=-w;dx<=w;dx++) {
+      const rx=cx+dx, ry=by-y;
+      if (rx>=0&&rx<W&&ry>=0) setPixel(data,rx,ry,W,mapColor(0.55+rng()*0.06,palette));
+    }
+  }
+  const wy=by+4, wh=5, ww=5;
+  [[bx+4,wy],[bx+bw-ww-4,wy]].forEach(([wx,_]) => {
+    for (let dy=0;dy<wh;dy++) for (let dx=0;dx<ww;dx++) {
+      setPixel(data,wx+dx,wy+dy,W,mapColor(0.8+rng()*0.15,palette));
+    }
+  });
+  const dx=Math.floor(bw/2)-2, dh=Math.floor(bh*0.55);
+  for (let y=by+bh-dh;y<by+bh;y++) for (let x=cx+dx-3;x<cx+dx+3;x++) {
+    setPixel(data,x,y,W,mapColor(0.22+rng()*0.04,palette));
+  }
+  for (let i=0;i<12;i++) {
+    const sx=cx-1+Math.floor(rng()*3), sy=by-rh-i-1;
+    if (sy>=0) setPixel(data,sx,sy,W,mapColor(0.6+i*0.02,palette));
+  }
+}
+
+function drawOcean(data, W, H, palette) {
+  const hor=Math.floor(H*0.4);
+  for (let y=0;y<hor;y++) for (let x=0;x<W;x++) {
+    const v=lerp(0.15,0.55,y/hor)+rng()*0.04;
+    setPixel(data,x,y,W,mapColor(clamp(v,0,1),palette));
+  }
+  const sunX=Math.floor(W*0.7), sunR=5;
+  for (let dy=-sunR;dy<=sunR;dy++) for (let dx=-sunR;dx<=sunR;dx++) {
+    if (dx*dx+dy*dy<=sunR*sunR) setPixel(data,sunX+dx,hor*0.4+dy,W,mapColor(0.95,palette));
+  }
+  for (let y=hor;y<H;y++) for (let x=0;x<W;x++) {
+    const wave=Math.sin(x*0.3+y*0.1)*1.5;
+    const v=0.35+0.25*((y-hor)/(H-hor))+wave*0.02+rng()*0.04;
+    setPixel(data,x,y,W,mapColor(clamp(v,0,1),palette));
+  }
+  for (let row=0;row<4;row++) {
+    const wy=hor+Math.floor(rng()*H*0.15)+row*8;
+    for (let x=Math.floor(rng()*W*0.5);x<W;x+=3+Math.floor(rng()*4)) {
+      setPixel(data,x,wy,W,mapColor(0.9,palette));
+    }
+  }
+}
+
+function drawFood(data, W, H, palette) {
+  for (let y=0;y<H;y++) for (let x=0;x<W;x++) {
+    setPixel(data,x,y,W,mapColor(0.08+rng()*0.04,palette));
+  }
+  const cx=Math.floor(W/2), cy=Math.floor(H*0.55);
+  const bw=Math.floor(W*0.55), bh=Math.floor(H*0.25);
+  for (let y=-bh;y<=bh;y++) {
+    const hw=Math.floor(bw*(1-Math.abs(y)/bh*0.4));
+    for (let dx=-hw;dx<=hw;dx++) {
+      const v = y<0 ? 0.65+rng()*0.05 : 0.5+rng()*0.08;
+      if (cx+dx>=0&&cx+dx<W&&cy+y>=0&&cy+y<H) setPixel(data,cx+dx,cy+y,W,mapColor(v,palette));
+    }
+  }
+  for (let i=0;i<6;i++) {
+    const nx=cx-bw*0.35+rng()*bw*0.7, ny=cy-bh*0.5+rng()*bh*0.3;
+    for (let dy=-2;dy<=2;dy++) for (let dx=-8;dx<=8;dx++) {
+      if (Math.abs(dx/8)+Math.abs(dy/2)<1.3) {
+        setPixel(data,Math.floor(nx+dx),Math.floor(ny+dy),W,mapColor(0.82+rng()*0.1,palette));
+      }
+    }
+  }
+  for (let i=0;i<20;i++) {
+    const fx=cx-bw*0.4+rng()*bw*0.8, fy=cy-bh*0.5+rng()*bh*0.2;
+    setPixel(data,Math.floor(fx),Math.floor(fy),W,mapColor(0.9+rng()*0.1,palette));
+  }
+  for (let y=0;y<bh*0.4;y++) {
+    const hw=Math.floor(bw*(0.6-y/bh*0.5));
+    for (let dx=-hw;dx<=hw;dx++) {
+      if (cx+dx>=0&&cx+dx<W) setPixel(data,cx+dx,cy-bh+y,W,mapColor(0.55+rng()*0.1,palette));
+    }
+  }
+}
+
+function drawCat(data, W, H, palette) {
+  for (let y=0;y<H;y++) for (let x=0;x<W;x++) {
+    setPixel(data,x,y,W,mapColor(0.1+rng()*0.03,palette));
+  }
+  const cx=Math.floor(W/2), cy=Math.floor(H*0.5);
+  for (let dy=-8;dy<=8;dy++) for (let dx=-9;dx<=9;dx++) {
+    if (dx*dx*0.9+dy*dy<72+rng()*4) setPixel(data,cx+dx,cy+dy,W,mapColor(0.7+rng()*0.1,palette));
+  }
+  [[cx-6,cy-10],[cx+6,cy-10]].forEach(([ex,ey])=>{
+    for(let dy=0;dy<6;dy++) for(let dx=-3+dy;dx<=3-dy;dx++) setPixel(data,ex+dx,ey-dy,W,mapColor(0.7,palette));
+  });
+  setPixel(data,cx-3,cy-2,W,mapColor(0.1,palette));
+  setPixel(data,cx+3,cy-2,W,mapColor(0.1,palette));
+  for(let dx=-2;dx<=2;dx++) setPixel(data,cx+dx,cy+1,W,mapColor(0.5,palette));
+  for(let dx=-5;dx<=5;dx++) setPixel(data,cx+dx,cy+3,W,mapColor(0.65,palette));
+  for(let i=0;i<12;i++) setPixel(data,cx+(i%2===0?-1:1)*(4+i),cy+2,W,mapColor(0.75+rng()*0.05,palette));
+  const ty=cy+8;
+  for(let i=0;i<H-ty;i++) {
+    const tw=Math.floor(3+Math.sin(i*0.3)*2);
+    for(let dx=-tw;dx<=tw;dx++) if(cx+dx>=0&&cx+dx<W) setPixel(data,cx+dx,ty+i,W,mapColor(0.65,palette));
+  }
+}
+
+function drawMountain(data, W, H, palette) {
+  drawSky(data,W,H,palette,0.6);
+  drawStars(data,W,H,palette,20);
+  const peaks=[{x:Math.floor(W*0.5),h:H*0.65},{x:Math.floor(W*0.25),h:H*0.45},{x:Math.floor(W*0.75),h:H*0.5}];
+  peaks.forEach(({x:px,h:ph}) => {
+    for (let y=Math.floor(H*(1-ph/H));y<H;y++) {
+      const spread=Math.floor((y-Math.floor(H*(1-ph/H)))*0.75);
+      for (let dx=-spread;dx<=spread;dx++) {
+        if (px+dx>=0&&px+dx<W) {
+          const v=0.4+0.2*(1-(y/H))+rng()*0.05;
+          setPixel(data,px+dx,y,W,mapColor(clamp(v,0,1),palette));
+        }
+      }
+    }
+    for (let dy=0;dy<6;dy++) {
+      const sw=Math.floor(dy*1.5);
+      for (let dx=-sw;dx<=sw;dx++) {
+        const sy=Math.floor(H*(1-ph/H))+dy;
+        if (px+dx>=0&&px+dx<W&&sy>=0) setPixel(data,px+dx,sy,W,mapColor(0.92,palette));
+      }
+    }
+  });
+}
+
+function drawCastle(data, W, H, palette) {
+  drawSky(data,W,H,palette,0.55);
+  drawStars(data,W,H,palette,25);
+  const cx=Math.floor(W/2);
+  const bw=Math.floor(W*0.45), bh=Math.floor(H*0.4), by=Math.floor(H*0.5);
+  for (let y=by;y<H;y++) for (let x=cx-Math.floor(bw/2);x<cx+Math.floor(bw/2);x++) {
+    if(x>=0&&x<W) setPixel(data,x,y,W,mapColor(0.3+rng()*0.05,palette));
+  }
+  const towers=[cx-Math.floor(bw/2),cx+Math.floor(bw/2)-6];
+  towers.forEach(tx=>{
+    const th=Math.floor(bh*0.65), tw=8;
+    for(let y=by-th;y<H;y++) for(let dx=0;dx<tw;dx++) {
+      if(tx+dx>=0&&tx+dx<W&&y>=0) setPixel(data,tx+dx,y,W,mapColor(0.28+rng()*0.04,palette));
+    }
+    for(let i=0;i<4;i++) {
+      const mh=4, mw=3, mx=tx+i*(tw/3);
+      for(let dy=0;dy<mh;dy++) for(let dx=0;dx<mw;dx++) {
+        if(i%2===0&&mx+dx>=0&&mx+dx<W) setPixel(data,mx+dx,by-th-mh+dy,W,mapColor(0.28,palette));
+      }
+    }
+  });
+  const dh=Math.floor(bh*0.35), dw=8;
+  for(let y=by+bh-dh;y<H;y++) for(let dx=-4;dx<4;dx++) {
+    setPixel(data,cx+dx,y,W,mapColor(0.15,palette));
+  }
+  const gateTop=by+bh-dh;
+  for(let dy=0;dy<8;dy++) for(let dx=-4;dx<4;dx++) {
+    if(Math.abs(dx)*0.5+dy<5) setPixel(data,cx+dx,gateTop-dy,W,mapColor(0.15,palette));
+  }
+}
+
+function drawRobot(data, W, H, palette) {
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++) {
+    setPixel(data,x,y,W,mapColor(0.05+fbm(x/W*2,y/H*2)*0.15,palette));
+  }
+  drawStars(data,W,H,palette,30);
+  const cx=Math.floor(W/2), cy=Math.floor(H*0.45);
+  const hw=10, hh=8;
+  for(let dy=-hh;dy<=hh;dy++) for(let dx=-hw;dx<=hw;dx++) {
+    setPixel(data,cx+dx,cy+dy,W,mapColor(0.55+rng()*0.05,palette));
+  }
+  setPixel(data,cx,cy-hh-1,W,mapColor(0.8,palette));
+  setPixel(data,cx,cy-hh-2,W,mapColor(0.8,palette));
+  [[cx-5,cy-2],[cx+3,cy-2]].forEach(([ex,ey])=>{
+    for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++) setPixel(data,ex+dx,ey+dy,W,mapColor(0.9+rng()*0.1,palette));
+  });
+  for(let dx=-4;dx<=4;dx++) setPixel(data,cx+dx,cy+2,W,mapColor(0.7,palette));
+  const bw=12, bh=10, by=cy+hh+1;
+  for(let dy=0;dy<bh;dy++) for(let dx=-bw;dx<=bw;dx++) {
+    setPixel(data,cx+dx,by+dy,W,mapColor(0.5+rng()*0.05,palette));
+  }
+  [[cx-bw-2,by+2],[cx+bw+2,by+2]].forEach(([ax,ay])=>{
+    for(let dy=0;dy<7;dy++) for(let dx=-2;dx<=2;dx++) setPixel(data,ax+dx,ay+dy,W,mapColor(0.45,palette));
+  });
+  const ly=by+bh;
+  [[cx-5,ly],[cx+5,ly]].forEach(([lx,_])=>{
+    for(let dy=0;dy<8;dy++) for(let dx=-2;dx<=2;dx++) setPixel(data,lx+dx,ly+dy,W,mapColor(0.45,palette));
+    for(let dx=-4;dx<=4;dx++) setPixel(data,lx+dx,ly+8,W,mapColor(0.4,palette));
+  });
+}
+
+function drawRandom(data, W, H, palette) {
+  const choice = Math.floor(rng() * 6);
+  const scenes = [drawDragon, drawSpace, drawCity, drawForest, drawOcean, drawMountain];
+  scenes[choice](data, W, H, palette);
+}
+
+function generate() {
+  const prompt = document.getElementById('prompt').value.trim() || 'pixel art';
+  const paletteKey = document.getElementById('paletteSelect').value;
+  const W = parseInt(document.getElementById('sizeSelect').value);
+  const H = W;
+  const scale = parseInt(document.getElementById('scaleSelect').value);
+
+  canvas.width = W * scale;
+  canvas.height = H * scale;
+
+  const overlay = document.getElementById('genOverlay');
+  overlay.classList.add('show');
+
+  setTimeout(() => {
+    rng = seededRng(prompt + paletteKey + W);
+
+    const palette = paletteKey === 'auto'
+      ? autoPalette(prompt)
+      : getPalette(paletteKey);
+
+    const data = new Uint8ClampedArray(W * H * 4);
+    const scene = pickScene(prompt);
+    scene(data, W, H, palette);
+
+    const imgData = new ImageData(data, W, H);
+    const offscreen = document.createElement('canvas');
+    offscreen.width = W; offscreen.height = H;
+    offscreen.getContext('2d').putImageData(imgData, 0, 0);
+
+    const dctx = canvas.getContext('2d');
+    dctx.imageSmoothingEnabled = false;
+    dctx.drawImage(offscreen, 0, 0, W*scale, H*scale);
+
+    overlay.classList.remove('show');
+  }, 30);
+}
+
+function randomPrompt() {
+  const p = SURPRISES[Math.floor(Math.random()*SURPRISES.length)];
+  document.getElementById('prompt').value = p;
+  generate();
+}
+
+function setPrompt(p) {
+  document.getElementById('prompt').value = p;
+  generate();
+}
+
+function saveImage() {
+  const a = document.createElement('a');
+  a.download = 'pixel-art.png';
+  a.href = canvas.toDataURL();
+  a.click();
+}
+
+document.getElementById('prompt').addEventListener('keydown', e => {
+  if (e.key === 'Enter') generate();
+});
+
+document.getElementById('sizeSelect').addEventListener('change', generate);
+document.getElementById('scaleSelect').addEventListener('change', generate);
+document.getElementById('paletteSelect').addEventListener('change', generate);
+
+generate();
+</script>
+</body>
+</html>
